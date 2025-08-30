@@ -1,14 +1,30 @@
 #!/bin/bash -e
 
+mkcleancd() {
+    [ -d "$1" ] && rm -rf "$1"
+    mkdir -p "$1"
+    cd "$1"
+}
+
 mkchroot() {
-    local packages="$(echo "$@" | tr ' ' ',')"
+    local chroot_dir="$1"
+    shift
+
+    if [ -f "$chroot_dir/sbin/init" ]; then
+        cd "$chroot_dir"
+    else
+        mkcleancd "$chroot_dir"
+    fi
+
+    [ -e ./sbin/init ] && { echo chroot already exists >&2; return 1; }
+    local packages; packages="$(echo "$@" | tr ' ' ',')"
     local suit=unstable
     local variant=minbase
     local components=main,contrib,non-free,non-free-firmware
     local extra_suits=stable
     local mirror=http://deb.debian.org/debian
     [ "$packages" ] && packages="--include=$packages"
-    debootstrap --verbose --variant=$variant --components=$components --extra-suites=$extra_suits $packages \
+    debootstrap --verbose --variant=$variant --components=$components --extra-suites=$extra_suits "$packages" \
         $suit . $mirror
 }
 
@@ -36,7 +52,7 @@ mksys() {
 }
 
 mkapt() {
-    local packages="$@"
+    local packages="$*"
 
     mkdir -p ./fake
     for binary in initctl invoke-rc.d restart start stop start-stop-daemon service; do
@@ -44,7 +60,7 @@ mkapt() {
     done
 
     mkdir -p ./etc/apt
-    cat > ./etc/apt/apt.conf <<EOF
+    cat > ./etc/apt/apt.conf <<'EOF'
 APT::Install-Recommends "0";
 APT::Install-Suggests "0";
 EOF
@@ -72,20 +88,21 @@ mkdwl() {
 }
 
 mkuser() {
+    [ -e ./home/i/src/dotfiles ] && { echo user already exists >&2; return 1; }
     echo auth sufficient pam_wheel.so trust >> ./etc/pam.d/su
     if [ -w ./etc/locale.gen ]; then
         echo en_US.UTF-8 UTF-8 > ./etc/locale.gen
         chroot . locale-gen || true
     fi
 
-    chroot . <<EOF
+    chroot . <<'EOF'
 groupadd audio
 groupadd video
 groupadd wheel
 groupadd sudo
 userdel --remove i
 set -e
-useradd --create-home --user-group --shell "\$(type -p bash)" -G audio,video,wheel,sudo i
+useradd --create-home --user-group --shell "$(type -p bash)" -G audio,video,wheel,sudo i
 passwd -d root
 passwd -d i
 su -c '
@@ -95,15 +112,38 @@ su -c '
     sh -e ~/src/dotfiles/install.sh --non-interactive
 ' i
 EOF
-    reset
+
+    reset  # The installation script runs vim and messes up the terminal.
+}
+
+mksession() {
+    chroot . su -c 'mkdir -p ~/.config/systemd/user' i
+    cat > ./home/i/.config/systemd/user/dwl.service <<'EOF'
+[Unit]
+Description=dwl
+After=basic.target
+ConditionPathExists=/dev/dri/renderD128
+
+[Service]
+ExecStart=/home/i/bin/dwlaunch.sh
+
+[Install]
+WantedBy=default.target
+EOF
+
+    # Allow user services to run without login, giving us a dwl auto-login.
+    mkdir -p ./var/lib/systemd/linger
+    touch ./var/lib/systemd/linger/i
+    chroot . su -c 'systemctl --user enable dwl' i
 }
 
 mkcpio() {
     local level=$1
-    find . -mount -print0 | pv -0 -l -s "$(find . | wc -l)" | cpio -o --null --format=newc | zstd -T0 -$level
+    find . -mount -print0 | pv -0 -l -s "$(find . | wc -l)" | cpio -o --null --format=newc | zstd -T0 "-$level"
 }
 
 mkinit() {
+    # Consider moving to a separate file.
     cat <<'EOF' > ./init
 #!/bin/sh
 
@@ -213,12 +253,15 @@ EOF
 }
 
 mkinitramfs() {
-    local modules="$1"
-    local binaries="$2"
+    local initramfs_dir="$1"
+    local modules="$2"
+    local binaries="$3"
+
+    mkcleancd "$initramfs_dir"
 
     cp -a --parents /lib/modules/"$(uname -r)"/modules.dep .
     for required_module in $modules; do
-        for dependency in $(modprobe --show-depends $required_module | grep -Po '^insmod \K.*$'); do
+        for dependency in $(modprobe --show-depends "$required_module" | grep -Po '^insmod \K.*$'); do
             mkdir -p ".$(dirname "$dependency")"
             cp -au --parents "$dependency" .
         done
@@ -226,7 +269,7 @@ mkinitramfs() {
 
     mkdir -p ./bin
     for binary in $binaries; do
-        binary="$(type -p $binary)"
+        binary="$(type -p "$binary")"
         cp -a "$binary" ./bin/.
         for library in $(ldd "$binary" 2> /dev/null | grep -o '/[^ ]*'); do
             cp -auL --parents "$library" .
@@ -250,7 +293,7 @@ test_on_qemu() {
     local ramdisk_size="$5"
 
     if [ ! -f "$qemu_disk" ]; then
-        qemu-img create -f raw "$qemu_disk" $ramdisk_size
+        qemu-img create -f raw "$qemu_disk" "$ramdisk_size"
         mkfs.ext4 -F "$qemu_disk"
     fi
     mkdir -p ./mnt
@@ -280,22 +323,16 @@ test_on_qemu() {
     qemu-system-x86_64 "${qemu_options[@]}"
 }
 
-mkcleancd() {
-    [ -d "$1" ] && rm -rf "$1"
-    mkdir -p "$1"
-    cd "$1"
-}
-
 mkma() {
     local host_name="${1:-$(hostname)}"
-    local chroot_dir="$(realpath ./chroot)"
-    local initramfs_dir="$(realpath ./initramfs)"
+    local chroot_dir; chroot_dir="$(realpath ./chroot)"
+    local initramfs_dir; initramfs_dir="$(realpath ./initramfs)"
     local base_image="$PWD/base.cpio.zst"
     local initramfs_image="$PWD/init.cpio.zst"
     local qemu_disk="$PWD/qemu.disk.raw"
     local initramfs_binaries=(busybox pv zstd)
     local initramfs_modules=(ext4 nvme overlay pci)
-    local base_packages=(coreutils dbus dbus-user-session klibc-utils kmod systemd-sysv tzdata udev util-linux)
+    local base_packages=(coreutils dbus dbus-broker dbus-user-session klibc-utils kmod systemd-sysv udev util-linux)
     local packages=("${base_packages[@]}"
         # Hardware support for my laptop.
         firmware-intel-* firmware-iwlwifi firmware-sof-signed intel-lpmd intel-media-va-driver-non-free intel-microcode
@@ -324,16 +361,6 @@ mkma() {
         fonts-noto fonts-noto-color-emoji
 
     )
-
-    if [ -f "$chroot_dir/sbin/init" ]; then
-        cd "$chroot_dir"
-    else
-        mkcleancd "$chroot_dir"
-        mkchroot "${base_packages[@]}"
-    fi
-
-    mksys "$host_name"
-
     if [ "$MKMA_QEMU_TEST" ]; then
         initramfs_modules+=(virtio_pci virtio_blk)
         if [ "$MKMA_QEMU_VGA" ]; then
@@ -341,29 +368,33 @@ mkma() {
         fi
     fi
 
+    mkchroot "$chroot_dir" "${base_packages[@]}" || true  # Allow re-running without breaking existing chroot.
+    mksys "$host_name"
+
     # Mount `/proc` for installations.
     mount --bind /proc ./proc
     trap 'umount ./proc' EXIT INT TERM HUP
 
     mkapt "${packages[@]}"
     mkdwl
-    mkuser
+    mkuser || true  # Allow re-running without breaking existing user.
+    mksession
 
     umount ./proc
     trap - EXIT INT TERM HUP
 
     mkcpio "$MKMA_COMPRESSION_LEVEL" > "$base_image"
 
-    mkcleancd "$initramfs_dir"
-    mkinitramfs "${initramfs_modules[*]}" "${initramfs_binaries[*]}"
+    mkinitramfs "$initramfs_dir" "${initramfs_modules[*]}" "${initramfs_binaries[*]}"
+
     mkcpio "$MKMA_COMPRESSION_LEVEL" > "$initramfs_image"
 
     if [ "$MKMA_QEMU_TEST" ]; then
         echo Testing mkma on QEMU...
-        test_on_qemu /boot/vmlinuz-$(uname -r) "$initramfs_image" "$(dirname "$base_image")" "$qemu_disk" 8G
+        test_on_qemu "/boot/vmlinuz-$(uname -r)" "$initramfs_image" "$(dirname "$base_image")" "$qemu_disk" 8G
     fi
 
-    echo kernel: /boot/vmlinuz-$(uname -r)
+    echo "kernel: /boot/vmlinuz-$(uname -r)"
     echo initramfs: "$initramfs_image"
     echo parameters: "mkma_images_device=$(df "$base_image" | grep -o '/dev/[^ ]*') mkma_images_path=$(dirname "$base_image")"
 }
