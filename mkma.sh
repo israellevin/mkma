@@ -54,11 +54,6 @@ mksys() {
 mkapt() {
     local packages="$*"
 
-    mkdir -p ./fake
-    for binary in initctl invoke-rc.d restart start stop start-stop-daemon service; do
-        ln -s --backup ./bin/true ./fake/$binary
-    done
-
     mkdir -p ./etc/apt
     cat > ./etc/apt/apt.conf <<'EOF'
 APT::Install-Recommends "0";
@@ -72,11 +67,10 @@ apt update
 apt --fix-broken install -y  # Sometimes debootstrap leaves broken packages.
 apt install -y $packages || exit 1
 apt clean
-systemctl disable bluetooth
-systemctl enable iwd
+systemctl disable apt-daily.service
+systemctl disable bluetooth.service
+systemctl enable iwd.service
 EOF
-
-    rm -rf ./fake
 }
 
 mkdwl() {
