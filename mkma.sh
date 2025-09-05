@@ -115,7 +115,8 @@ mksession() {
     cat > ./home/i/.config/systemd/user/dwl.service <<'EOF'
 [Unit]
 Description=dwl
-After=basic.target
+Wants=xdg-desktop-portal-wlr.service
+After=xdg-desktop-portal-wlr.service
 ConditionPathExists=/dev/dri/renderD128
 
 [Service]
