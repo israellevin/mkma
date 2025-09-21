@@ -7,16 +7,6 @@ mkcleancd() {
 }
 
 mkchroot() {
-    local chroot_dir="$1"
-    shift
-
-    if [ -f "$chroot_dir/sbin/init" ]; then
-        cd "$chroot_dir"
-    else
-        mkcleancd "$chroot_dir"
-    fi
-
-    [ -e ./sbin/init ] && { echo chroot already exists >&2; return 1; }
     local packages; packages="$(echo "$@" | tr ' ' ',')"
     local suit=unstable
     local variant=minbase
@@ -82,7 +72,6 @@ mkdwl() {
 }
 
 mkuser() {
-    [ -e ./home/i/src/dotfiles ] && { echo user already exists >&2; return 1; }
     echo auth sufficient pam_wheel.so trust >> ./etc/pam.d/su
     if [ -w ./etc/locale.gen ]; then
         echo en_US.UTF-8 UTF-8 > ./etc/locale.gen
@@ -90,13 +79,11 @@ mkuser() {
     fi
 
     chroot . <<'EOF'
-groupadd audio
-groupadd video
 groupadd wheel
-groupadd sudo
 userdel --remove i
 set -e
-useradd --create-home --user-group --shell "$(type -p bash)" -G audio,video,wheel,sudo i
+useradd --create-home --user-group --shell "$(type -p bash)" -G \
+    audio,bluetooth,clock,docker,plugdev,render,sudo,video,wheel i
 passwd -d root
 passwd -d i
 su -c '
@@ -256,7 +243,16 @@ mkma() {
         fi
     fi
 
-    mkchroot "$chroot_dir" "${base_packages[@]}" || true  # Allow re-running without breaking existing chroot.
+    # Allow keeping the chroot between runs for faster testing.
+    if [ -f "$chroot_dir/sbin/init" ]; then
+        cd "$chroot_dir"
+        echo chroot already exists >&2
+    else
+        mkcleancd "$chroot_dir"
+        mkchroot "${base_packages[@]}"
+    fi
+
+
     mksys "$host_name"
 
     # Mount `/proc` for installations.
@@ -265,7 +261,12 @@ mkma() {
 
     mkapt "${packages[@]}"
     mkdwl
-    mkuser || true  # Allow re-running without breaking existing user.
+    # Allow keeping the user between runs for faster testing.
+    if [ -f ./home/i/src/dotfiles/install.sh ]; then
+        echo user already exists >&2
+    else
+        mkuser
+    fi
     mksession
 
     umount ./proc
