@@ -65,19 +65,15 @@ EOF
 
 mkdwl() {
     curl https://raw.githubusercontent.com/israellevin/dwl/refs/heads/master/Dockerfile > Dockerfile
-    docker build -t dwl-builder .
-    rm Dockerfile
-    docker run --rm --name dwl-builder -dp 80:8000 dwl-builder
+    # If run with sudo and not with root, make sure not to screw up docker file permissions.
+    ${SUDO_USER:+sudo -u "$SUDO_USER"} docker build -t dwl-builder .
+    ${SUDO_USER:+sudo -u "$SUDO_USER"} docker run --rm --name dwl-builder -dp 80:8000 dwl-builder
     chroot . sh -c 'curl localhost | tar -xC /'
+    rm Dockerfile
 }
 
 mkuser() {
     echo auth sufficient pam_wheel.so trust >> ./etc/pam.d/su
-    if [ -w ./etc/locale.gen ]; then
-        echo en_US.UTF-8 UTF-8 > ./etc/locale.gen
-        chroot . locale-gen || true
-    fi
-
     chroot . <<'EOF'
 groupadd wheel
 userdel --remove i
