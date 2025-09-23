@@ -68,7 +68,7 @@ mkdwl() {
     # If run with sudo and not with root, make sure not to screw up docker file permissions.
     ${SUDO_USER:+sudo -u "$SUDO_USER"} docker build -t dwl-builder .
     ${SUDO_USER:+sudo -u "$SUDO_USER"} docker run --rm --name dwl-builder -dp 80:8000 dwl-builder
-    chroot . sh -c 'curl localhost | tar -xC /'
+    chroot . sh -c 'curl localhost | tar -xC / && ldconfig'
     rm Dockerfile
 }
 
@@ -203,7 +203,7 @@ mkma() {
     local qemu_disk="$PWD/qemu.disk.raw"
     local initramfs_binaries=(busybox pv zstd)
     local initramfs_modules=(ext4 nvme overlay pci)
-    local base_packages=(coreutils dbus dbus-broker dbus-user-session klibc-utils kmod systemd-sysv udev util-linux)
+    local base_packages=(coreutils dbus-broker klibc-utils kmod systemd-sysv udev util-linux)
     local packages=("${base_packages[@]}"
         # Hardware support for my laptop.
         firmware-intel-* firmware-iwlwifi firmware-sof-signed intel-lpmd intel-media-va-driver-non-free intel-microcode
@@ -221,8 +221,10 @@ mkma() {
         debootstrap docker.io docker-cli make python3-pip python3-venv shellcheck
         # Media tools.
         bluez ffmpeg mpv pipewire-audio yt-dlp
+        # Session support.
+        dbus-user-session libseat1 rtkit seatd
         # Wayland support.
-        libgles2 libinput10 libliftoff0 libseat1 libwayland-server0 seatd xdg-desktop-portal xdg-desktop-portal-wlr
+        libgles2 libinput10 libliftoff0 libwayland-server0 xdg-desktop-portal xdg-desktop-portal-wlr
         # X support.
         libxcb-composite0 libxcb-errors0 libxcb-ewmh2 libxcb-icccm4 libxcb-render-util0
         libxcb-render0 libxcb-res0 libxcb-xinput0 xwayland

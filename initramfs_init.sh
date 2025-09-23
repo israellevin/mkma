@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC3040  # Supported by bysybox sh.
 
 mkdir -p /dev
 mount -t devtmpfs devtmpfs /dev
@@ -18,6 +19,7 @@ info Starting mkma init process
 info Getting mkma parameters
 mkdir -p /proc
 mount -t proc proc /proc
+# shellcheck disable=SC2013  # Reading words, not lines.
 for arg in $(cat /proc/cmdline); do
     case "$arg" in
         mkma_images_device=*)
@@ -29,13 +31,25 @@ for arg in $(cat /proc/cmdline); do
     esac
 done
 
+mount_dir=/mnt
 overlay_dir=/overlay
+base_dir=$overlay_dir/base
+work_dir=$overlay_dir/work
+fresh_dir=$overlay_dir/fresh
+merge_dir=$overlay_dir/merge
+bind_dir=$merge_dir/overlay
+persistence_script=$base_dir/sbin/persist
+
 info Mounting mkma tmpfs for mkma overlay on "$overlay_dir"
 mkdir -p "$overlay_dir"
 mount -t tmpfs -o size=8G tmpfs "$overlay_dir" || \
     emergency Could not mount tmpfs on "'$overlay_dir'"
 
-mount_dir=/mnt
+info Creating mkma base directory on "$base_dir"
+mkdir -p "$base_dir"
+cd "$base_dir" || \
+    emergency Could not change directory to "'$base_dir'"
+
 info Mounting mkma images device "'$mkma_images_device'" on "$mount_dir"
 mkdir -p "$mount_dir"
 modprobe nvme
@@ -47,12 +61,10 @@ mount "$mkma_images_device" "$mount_dir" || \
     emergency Could not mount mkma images device "'$mkma_images_device'" on "'$mount_dir'"
 images_dir="$mount_dir/$images_path"
 
-base_dir=/overlay/base
-info Copying mkma base image data from "'$images_dir'" to "'$base_dir'"
-mkdir -p "$base_dir"
-cd "$base_dir"
 
-set -o pipefail  # Supported by bysybox sh.
+set -o pipefail
+
+info Copying mkma base image data from "'$images_dir'" to "'$base_dir'"
 pv -pterab "$images_dir"/base.cpio.zst | zstd -dcfT0 | cpio -id || \
     emergency Could not copy base image data from "'$images_dir'" to "'$base_dir'"
 
@@ -70,32 +82,26 @@ set +o pipefail
 umount /mnt
 umount /proc
 
-persistence_script="$base_dir/sbin/persist"
 info Creating persistance script in "$persistence_script"
-fresh_dir=/overlay/fresh
-cat > "$persistence_script" <<EOIF
+cat > "$persistence_script" <<EOF
 #!/bin/sh
 persist_list=/tmp/mkma.persist.list
 persist_file="\$PWD/persistence.\$(date +%Y-%m-%d-%H:%M).cpio.zst"
-
 cd "$fresh_dir"
 find . -mount > \$persist_list
 vi \$persist_list
 pv -ls \$(wc -l \$persist_list | cut -d' ' -f1) \$persist_list | cpio -o --format=newc | zstd -T0 -19 > \
     "\$persist_file"
-EOIF
+EOF
 chmod +x "$persistence_script"
 
 info Mounting mkma overlayfs
-work_dir=/overlay/work
-merge_dir=/overlay/merge
 mkdir -p "$fresh_dir" "$work_dir" "$merge_dir"
 modprobe overlay || \
     emergency Could not load overlay module
 mount -t overlay overlay -o lowerdir="$base_dir",upperdir="$fresh_dir",workdir="$work_dir" "$merge_dir" || \
     emergency "Could not mount overlayfs on '$merge_dir' with lower='$base_dir', upper='$fresh_dir', work='$work_dir'"
 
-bind_dir="$merge_dir/overlay"
 info Binding mkma overlay to merge directory in "$bind_dir"
 mkdir -p "$bind_dir"
 mount --bind "$overlay_dir" "$bind_dir" || \
