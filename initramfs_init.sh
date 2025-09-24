@@ -22,12 +22,11 @@ mount -t proc proc /proc
 # shellcheck disable=SC2013  # Reading words, not lines.
 for arg in $(cat /proc/cmdline); do
     case "$arg" in
-        mkma_images_device=*)
-            mkma_images_device="${arg#mkma_images_device=}"
+        mkma_storage_device=*)
+            storage_device="${arg#mkma_storage_device=}"
             ;;
         mkma_images_path=*)
             images_path="${arg#mkma_images_path=/}"
-            ;;
     esac
 done
 
@@ -38,7 +37,6 @@ work_dir=$overlay_dir/work
 fresh_dir=$overlay_dir/fresh
 merge_dir=$overlay_dir/merge
 bind_dir=$merge_dir/overlay
-persistence_script=$base_dir/sbin/persist
 
 info Mounting mkma tmpfs for mkma overlay on "$overlay_dir"
 mkdir -p "$overlay_dir"
@@ -50,15 +48,15 @@ mkdir -p "$base_dir"
 cd "$base_dir" || \
     emergency Could not change directory to "'$base_dir'"
 
-info Mounting mkma images device "'$mkma_images_device'" on "$mount_dir"
+info Mounting mkma images device "'$storage_device'" on "$mount_dir"
 mkdir -p "$mount_dir"
 modprobe nvme
 modprobe crc32c_generic
 modprobe ext4
 modprobe virtio_blk || true  # Just for qemu testing.
 modprobe virtio_pci || true  # Just for qemu testing.
-mount "$mkma_images_device" "$mount_dir" || \
-    emergency Could not mount mkma images device "'$mkma_images_device'" on "'$mount_dir'"
+mount "$storage_device" "$mount_dir" || \
+    emergency Could not mount mkma images device "'$storage_device'" on "'$mount_dir'"
 images_dir="$mount_dir/$images_path"
 
 
@@ -81,19 +79,6 @@ set +o pipefail
 
 umount /mnt
 umount /proc
-
-info Creating persistance script in "$persistence_script"
-cat > "$persistence_script" <<EOF
-#!/bin/sh
-persist_list=/tmp/mkma.persist.list
-persist_file="\$PWD/persistence.\$(date +%Y-%m-%d.%H:%M).cpio.zst"
-cd "$fresh_dir"
-find . -mount > \$persist_list
-vi \$persist_list
-pv -ls \$(wc -l \$persist_list | cut -d' ' -f1) \$persist_list | cpio -o --format=newc | zstd -T0 -19 > \
-    "\$persist_file"
-EOF
-chmod +x "$persistence_script"
 
 info Mounting mkma overlayfs
 mkdir -p "$fresh_dir" "$work_dir" "$merge_dir"
