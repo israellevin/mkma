@@ -86,7 +86,7 @@ info Creating persistance script in "$persistence_script"
 cat > "$persistence_script" <<EOF
 #!/bin/sh
 persist_list=/tmp/mkma.persist.list
-persist_file="\$PWD/persistence.\$(date +%Y-%m-%d-%H:%M).cpio.zst"
+persist_file="\$PWD/persistence.\$(date +%Y-%m-%d.%H:%M).cpio.zst"
 cd "$fresh_dir"
 find . -mount > \$persist_list
 vi \$persist_list

@@ -57,8 +57,6 @@ apt update
 apt --fix-broken install -y  # Sometimes debootstrap leaves broken packages.
 apt install -y $packages || exit 1
 apt clean
-systemctl disable apt-daily.service
-systemctl disable bluetooth.service
 systemctl enable iwd.service
 EOF
 }
