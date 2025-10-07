@@ -58,6 +58,8 @@ apt --fix-broken install -y  # Sometimes debootstrap leaves broken packages.
 apt install -y $packages || exit 1
 apt clean
 systemctl enable iwd.service
+mkdir -p /etc/systemd/system/multi-user.target.wants
+ln -sf /usr/lib/systemd/system/iwd.service /etc/systemd/system/multi-user.target.wants/iwd.service
 EOF
 }
 
@@ -214,22 +216,20 @@ mkma() {
         # Networking infrastructure.
         ca-certificates dhcpcd5 iproute2 netbase
         # Networking tools.
-        aria2 curl iputils-ping iwd openssh-server rsync sshfs w3m wget
+        aria2 curl iputils-ping iwd openssh-server rfkill rsync sshfs w3m wget
         # Development tools.
         debootstrap docker.io docker-cli make python3-pip python3-venv shellcheck
         # Media tools.
         bluez ffmpeg mpv pipewire-audio yt-dlp
         # Session support.
-        dbus-user-session libseat1 rtkit seatd
+        dbus-user-session polkitd rtkit
         # Wayland support.
         libgles2 libinput10 libliftoff0 libwayland-server0 xdg-desktop-portal xdg-desktop-portal-wlr
         # X support.
         libxcb-composite0 libxcb-errors0 libxcb-ewmh2 libxcb-icccm4 libxcb-render-util0
         libxcb-render0 libxcb-res0 libxcb-xinput0 xwayland
         # GUI tools.
-        cliphist foot firefox grim slurp wl-clipboard wlsunset wlrctl wmenu
-        # GUI fonts.
-        fonts-noto fonts-noto-color-emoji
+        cliphist fonts-noto fonts-noto-color-emoji foot firefox grim slurp wl-clipboard wlsunset wlrctl wmenu
 
     )
     if [ "$MKMA_QEMU_TEST" ]; then
