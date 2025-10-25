@@ -128,13 +128,13 @@ mkinitramfs() {
 
     mkcleancd "$initramfs_dir"
 
-    cp -a --parents /lib/modules/"$(uname -r)"/modules.dep .
     for required_module in $modules; do
         for dependency in $(modprobe --show-depends "$required_module" | grep -Po '^insmod \K.*$'); do
             mkdir -p ".$(dirname "$dependency")"
             cp -au --parents "$dependency" .
         done
     done
+    depmod -m "$(realpath ./lib/modules)"
 
     mkdir -p ./bin
     for binary in $binaries; do
@@ -203,7 +203,7 @@ mkma() {
     local qemu_disk="$PWD/qemu.disk.raw"
     local initramfs_binaries=(busybox pv zstd)
     local initramfs_modules=(ext4 nvme overlay pci)
-    local base_packages=(coreutils dbus-broker kmod systemd-sysv udev util-linux)
+    local base_packages=(coreutils dbus-broker systemd-sysv udev util-linux)
     local packages=("${base_packages[@]}"
         # Hardware support for my laptop.
         firmware-intel-* firmware-iwlwifi firmware-sof-signed intel-lpmd intel-media-va-driver-non-free intel-microcode
