@@ -203,10 +203,12 @@ mkma() {
     local qemu_disk="$PWD/qemu.disk.raw"
     local initramfs_binaries=(busybox pv zstd)
     local initramfs_modules=(ext4 nvme overlay pci)
-    local base_packages=(coreutils dbus-broker klibc-utils kmod systemd-sysv udev util-linux)
+    local base_packages=(coreutils dbus-broker kmod systemd-sysv udev util-linux)
     local packages=("${base_packages[@]}"
         # Hardware support for my laptop.
         firmware-intel-* firmware-iwlwifi firmware-sof-signed intel-lpmd intel-media-va-driver-non-free intel-microcode
+        # System utilities.
+        kmod irqbalance numad
         # Common utilities.
         bc bsdextrautils bsdutils jq linux-perf mawk moreutils pciutils psmisc pv sed sudo ripgrep usbutils
         # CLI environment.
@@ -247,7 +249,6 @@ mkma() {
         mkcleancd "$chroot_dir"
         mkchroot "${base_packages[@]}"
     fi
-
 
     mksys "$host_name"
 
