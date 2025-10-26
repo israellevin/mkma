@@ -176,7 +176,7 @@ test_on_qemu() {
         -m "$ramdisk_size"
         -kernel "$kernel_image"
         -initrd "$initramfs_image"
-        -append "console=tty root=/dev/ram0 init=/init mkma_images_device=/dev/vda mkma_images_path=$images_dir"
+        -append "console=tty root=/dev/ram0 init=/init mkma_storage_device=/dev/vda mkma_images_path=$images_dir"
         -netdev 'user,id=mynet0'
         -device 'e1000,netdev=mynet0'
         -drive file="$qemu_disk,format=raw,if=virtio,cache=none"
@@ -224,7 +224,7 @@ mkma() {
         # Media tools.
         bluez ffmpeg mpv pipewire-audio yt-dlp
         # Session support.
-        dbus-user-session polkitd rtkit
+        dbus-user-session libseat1 polkitd rtkit
         # Wayland support.
         libgles2 libinput10 libliftoff0 libwayland-server0 xdg-desktop-portal xdg-desktop-portal-wlr
         # X support.
@@ -282,7 +282,7 @@ mkma() {
 
     echo "kernel: /boot/vmlinuz-$(uname -r)"
     echo initramfs: "$initramfs_image"
-    echo parameters: "mkma_images_device=$(df "$base_image" | grep -o '/dev/[^ ]*') mkma_images_path=$(dirname "$base_image")"
+    echo parameters: "mkma_storage_device=$(df "$base_image" | grep -o '/dev/[^ ]*') mkma_images_path=$(dirname "$base_image")"
 }
 
 # Allow sourcing of functions for manual runs.
