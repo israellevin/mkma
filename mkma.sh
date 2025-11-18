@@ -183,7 +183,7 @@ test_on_qemu() {
         -enable-kvm
     )
 
-    if [ "$MKMA_QEMU_VGA" ]; then
+    if [ "$MKMA_QEMU_DRI" ]; then
         qemu_options+=(
             -vga virtio
             -display 'sdl,gl=on'
@@ -198,6 +198,7 @@ mkma() {
     local chroot_dir="$PWD/chroot"
     local initramfs_dir="$PWD/initramfs"
     local initramfs_init_file="$PWD/initramfs_init.sh"
+    local persist_script="$PWD/persist.sh"
     local initramfs_image="$PWD/init.cpio.zst"
     local base_image="$PWD/base.cpio.zst"
     local qemu_disk="$PWD/qemu.disk.raw"
@@ -236,7 +237,7 @@ mkma() {
     )
     if [ "$MKMA_QEMU_TEST" ]; then
         initramfs_modules+=(virtio_pci virtio_blk)
-        if [ "$MKMA_QEMU_VGA" ]; then
+        if [ "$MKMA_QEMU_DRI" ]; then
             packages+=(mesa-utils libgl1-mesa-dri)
         fi
     fi
@@ -251,6 +252,7 @@ mkma() {
     fi
 
     mksys "$host_name"
+    cp -a "$persist_script" ./sbin/persist.sh
 
     # Mount `/proc` for installations.
     mount --bind /proc ./proc
@@ -277,7 +279,7 @@ mkma() {
 
     if [ "$MKMA_QEMU_TEST" ]; then
         echo Testing mkma on QEMU...
-        test_on_qemu "/boot/vmlinuz-$(uname -r)" "$initramfs_image" "$(dirname "$base_image")" "$qemu_disk" 8G
+        test_on_qemu "/boot/vmlinuz-$(uname -r)" "$initramfs_image" "$(dirname "$base_image")" "$qemu_disk" 16G
     fi
 
     echo "kernel: /boot/vmlinuz-$(uname -r)"

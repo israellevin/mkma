@@ -1,80 +1,59 @@
 # mkma.sh - Make a GNU/Linux machine the way I like it
 
-Currently this is a debian, systemd, into-RAM bootable image.
+A simple set of scripts to create a minimal bootable GNU/Linux system image that loads entirely into RAM upon boot, with optional persistence layers. Currently based on debian with systemd-sysv, dbus-broker, wayland, pipewire and dwl.
 
-- `./initramfs_init.sh` is an init script which loads mkma images into RAM upon boot.
-- `./mkma.sh` is a script to create and test mkma base images and initramfs images.
+## Contents
 
-The script respects the following environment variables:
-- `MKMA_COMPRESSION_LEVEL` (default: `3`) - Compression level for `zstd` compression of the images
-- `MKMA_QEMU_TEST` (default: unset) - If set to `1` the script will run the created image in QEMU for testing (note: this will add a couple of modules to the initramfs image)
-- `MKMA_QEMU_VGA` (default: unset) - If set to `1` the script will run QEMU with a VGA display instead of serial console (note: this will add a couple of debian packages to the base image)
+- `./initramfs_init.sh`: extracts and mounts mkma images into a RAM based overlay filesystem during early boot (as the init script of the initramfs)
+- `./mkma.sh`: creates and tests mkma images
+- `./persist.sh`: creates a read-only persistence image from selected changes made to the system
 
 ## Usage
 
-```bash
+```shell
 sudo ./mkma.sh <optional hostname (default: hostname of the building machine)>
 ```
 
-The script will create a `base.cpio.zst` file with the configured system, and an `initramfs.cpio.zst` file with the initial filesystem for booting into RAM. To boot into the created image you will need to configure your bootloader to boot the current kernel with the generated `initramfs.cpio.zst` file and the following kernel command line options:
+The script respects the following environment variables:
+- `MKMA_COMPRESSION_LEVEL` (default: `3`) - Compression level for `zstd` compression of the images
+- `MKMA_QEMU_TEST` (default: unset) - If set to `1` the script will run the created image in QEMU for testing (note: this will also add a couple of modules to the initramfs image)
+- `MKMA_QEMU_DRI` (default: unset) - If set to `1` the script will run QEMU with DRI enabled (requires `MKMA_QEMU_TEST` to be set as well)
+
+The script will create a `base.cpio.zst` file with the configured system, and an `initramfs.cpio.zst` file with the initial filesystem required to extracts the base image into a RAM based overlay filesystem during early boot. If you have `MKMA_QEMU_TEST` set to `1` (highly recommended when testing new configurations) it will then run the created image in QEMU for testing.
+
+To actually boot your machine from the created image you will need to configure your bootloader to boot the current kernel with the generated `initramfs.cpio.zst` file and the following kernel command line options (the script will output the correct values for you):
 
 - `mkma_storage_device` - the device where the `base.cpio.zst` file is stored (e.g. `/dev/nvme0n1p3`)
 - `mkma_images_path` - the path where the `base.cpio.zst` file is stored (e.g. `/home/user/mkma_images`)
 
-For `/etc/default/grub` you would add something like this:
+The full kernel command line will look something like this (replace the values with the ones output by the script):
 
+```shell
+linux /boot/vmlinuz-6.16.11-1-liquorix-amd64 root=/dev/nvme0n1p3 mkma_storage_device=/dev/nvme0n1p3 mkma_images_path=/home/user/mkma_images
+initrd /home/user/mkma_images/initramfs.cpio.zst
 ```
-GRUB_CMDLINE_LINUX_DEFAULT="mkma_images_device=/dev/... mkma_images_path=/home/..."
-```
 
-Then run `sudo update-grub` and reboot.
-
-The script will also create a `chroot` directory and an `initramfs` directory which you can play with and investigate.
-
-If you use the `MKMA_QEMU_TEST` environment variable the script will also run the created image in QEMU for testing and will also create a `qemu.disk.raw` file with a raw disk image for QEMU.
+The script will also create a `chroot` and an `initramfs` directories which you can chroot into, play with and investigate.
 
 ## Persistence
 
-Before booting into the system, the init script creates an overlay filesystem in RAM on top of the base image, isolating any changes made to the system from the base image. These changes are written to the `/overlay/fresh` directory in RAM, and - by default - are lost when the system is powered off.
-
-However, there are two types of persistence that can easily be implemented - manual persistence, which allows me to pick specific changes and select them to be loaded into the base (read-only) directory of the overlay, and automatic  persistence, which consists of mounting additional overlay layers on top of any directory I want to be persistent.
-
-### Read-only persistence
-
-Since all changes from the base system are written to the `/overlay/fresh` directory, I can easily pick and choose which changes I want to be persistent by creating a cpio archive of the selected files and directories in the `/overlay/fresh` directory, and then placing that archive in the same directory as the `base.cpio.zst` file.
+By default, any changes made to the system during runtime are lost when the system is powered off, since the entire system runs from RAM. However, when copying the base image from the storage device into RAM, the initramfs creates an overlay filesystem in RAM so that a copy of the base image remains untouched (overlay lowerdir) and any changes made to the system are written to `/overlay/fresh` (overlay upperdir). This makes it very easy to create a snapshot of selected changes made to the system during runtime and load it automatically on top of the base image during future boots.
 
 ```sh
-#!/bin/sh
-persist_list=/tmp/mkma.persist.list
-persist_file="\$PWD/persistence.\$(date +%Y-%m-%d.%H:%M).cpio.zst"
-cd "$fresh_dir"
-find . -mount > \$persist_list
-vi \$persist_list
-pv -ls \$(wc -l \$persist_list | cut -d' ' -f1) \$persist_list | cpio -o --format=newc | zstd -T0 -19 > "\$persist_file"
+sudo ./persist.sh
 ```
 
-During early boot, right after the base image is loaded into RAM, the init script will check for the existence of a `persistence.*.cpio.zst` files in the same directory as the `base.cpio.zst` file. Any such files will be loaded into RAM on top of the base image, one after the other.
+The script automatically mounts the `mkma_storage_device` specified in the kernel command line and writes a list files and directories that have been changed since boot (the content of the `/overlay/fresh` directory) to a temporary file in its `mkma_images_path` directory. This file is then opened with an editor so that unwanted entries can be deleted. Once the editor is exited the script creates a compressed cpio archive named `persistence.<timestamp>.cpio.zst` in the `mkma_images_path` directory and unmounts the `mkma_storage_device`.
 
+During early boot, right after the base image is loaded into RAM, the init script checks for the existence of a `persistence.*.cpio.zst` files in the same directory, extracting the content of found files on top of the base image one after the other before handing over control to the real init system. This way, any changes saved in the persistence images are automatically applied on top of the base image during boot.
 
-### Automatic persistence
+### Considerations
 
-For directories that I want to be automatically persistent, I create additional overlay.
+This method concentrates the usage of the storage device and any overhead associated with it to specific moments in time (snapshot creation and loading), which means all the moments in between are pure RAM. It also means that all the moments in between are lost in case of power loss.
 
-```sh
-#!/bin/sh
+This method needs to be used selectively as it loads the entire snapshot into RAM during boot (the current size limit imposed by the initramfs is 50% of the available RAM for the entire root filesystem, but this is easy enough to change),
+That's why the current implementation has a manual editing step to remove unwanted entries.
 
-for directory in etc home opt usr var; do
-    mountpoint="/$directory"
-    lower="/mnt/home/user/mkma_persistence/$directory/lower"
-    upper="/mnt/home/user/mkma_persistence/$directory/upper"
-    work="/mnt/home/user/mkma_persistence/$directory/work"
+Bottom line: if you want to persist your local environment, a few carefully installed packages and some configuration files, this is the way to go. I may even automate it at some point, use hard coded filters instead of manual editing and run it according to some twisted logic involving time since last snapshot and available resources. If, however, you need to persist larger amounts of data in a more continuous manner, just mount a storage device and use it directly.
 
-    mkdir -p "$lower" "$upper" "$work"
-
-    mount --bind "/$directory" "$lower"
-
-    mount -t overlay overlay -o lowerdir="$lower",upperdir="$upper",workdir="$work" "$mountpoint"
-done
-```
-
-Mounting `/usr` and even `/etc` at a late stage could cause issues, so perhaps this is best done as an early service, as soon as `/mnt` is mounted, but on my minimal system it seems to work fine.
+And if you find that you need files that are constantly in flux (like databases and caches) to be continuously persisted, then mkma is probably not the right tool for you.

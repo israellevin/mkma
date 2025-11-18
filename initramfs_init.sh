@@ -40,7 +40,7 @@ bind_dir=$merge_dir/overlay
 
 info Mounting mkma tmpfs for mkma overlay on "$overlay_dir"
 mkdir -p "$overlay_dir"
-mount -t tmpfs -o size=8G tmpfs "$overlay_dir" || \
+mount -t tmpfs -o size=50% tmpfs "$overlay_dir" || \
     emergency Could not mount tmpfs on "'$overlay_dir'"
 
 info Creating mkma base directory on "$base_dir"
