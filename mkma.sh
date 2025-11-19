@@ -209,7 +209,7 @@ mkma() {
         # Hardware support for my laptop.
         firmware-intel-* firmware-iwlwifi firmware-sof-signed intel-lpmd intel-media-va-driver-non-free intel-microcode
         # System utilities.
-        kmod irqbalance numad
+        kmod irqbalance numad systemd-timesyncd
         # Common utilities.
         bc bsdextrautils bsdutils jq linux-perf mawk moreutils pciutils psmisc pv sed sudo ripgrep usbutils
         # CLI environment.
@@ -225,7 +225,7 @@ mkma() {
         # Media tools.
         bluez ffmpeg mpv pipewire-audio yt-dlp
         # Session support.
-        dbus-user-session libseat1 polkitd rtkit
+        dbus-bin dbus-user-session libseat1 polkitd rtkit
         # Wayland support.
         libgles2 libinput10 libliftoff0 libwayland-server0 xdg-desktop-portal xdg-desktop-portal-wlr
         # X support.
@@ -233,7 +233,6 @@ mkma() {
         libxcb-render0 libxcb-res0 libxcb-xinput0 xwayland
         # GUI tools.
         cliphist fonts-noto fonts-noto-color-emoji foot firefox grim slurp wl-clipboard wlsunset wlrctl wmenu
-
     )
     if [ "$MKMA_QEMU_TEST" ]; then
         initramfs_modules+=(virtio_pci virtio_blk)
