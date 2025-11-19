@@ -58,8 +58,6 @@ apt --fix-broken install -y  # Sometimes debootstrap leaves broken packages.
 apt install -y $packages || exit 1
 apt clean
 systemctl enable iwd.service
-mkdir -p /etc/systemd/system/multi-user.target.wants
-ln -sf /usr/lib/systemd/system/iwd.service /etc/systemd/system/multi-user.target.wants/iwd.service
 EOF
 }
 
@@ -94,6 +92,14 @@ EOF
 }
 
 mksession() {
+    mkdir -p ./etc/systemd/system/getty@tty1.service.d
+    cat > ./etc/systemd/system/getty@tty1.service.d/override.conf <<'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin i --noreset --noclear - ${TERM}
+Type=simple
+EOF
+
     chroot . su -c 'mkdir -p ~/.config/systemd/user' i
     cat > ./home/i/.config/systemd/user/dwl.service <<'EOF'
 [Unit]
@@ -108,10 +114,6 @@ ExecStart=/home/i/bin/dwlaunch.sh
 [Install]
 WantedBy=default.target
 EOF
-
-    # Allow user services to run without login, giving us a dwl auto-login.
-    mkdir -p ./var/lib/systemd/linger
-    touch ./var/lib/systemd/linger/i
     chroot . su -c 'systemctl --user enable dwl' i
 }
 
