@@ -71,7 +71,6 @@ mkdwl() {
 }
 
 mkuser() {
-    echo auth sufficient pam_wheel.so trust >> ./etc/pam.d/su
     chroot . <<'EOF'
 groupadd wheel
 userdel --remove i
@@ -87,7 +86,7 @@ su -c '
     sh -e ~/src/dotfiles/install.sh --non-interactive
 ' i
 EOF
-
+    echo auth sufficient pam_wheel.so trust >> ./etc/pam.d/su
     reset  # The installation script runs vim and messes up the terminal.
 }
 
@@ -99,22 +98,6 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin i --noreset --noclear - ${TERM}
 Type=simple
 EOF
-
-    chroot . su -c 'mkdir -p ~/.config/systemd/user' i
-    cat > ./home/i/.config/systemd/user/dwl.service <<'EOF'
-[Unit]
-Description=dwl
-Wants=xdg-desktop-portal-wlr.service
-After=xdg-desktop-portal-wlr.service
-ConditionPathExists=/dev/dri/renderD128
-
-[Service]
-ExecStart=/home/i/bin/dwlaunch.sh
-
-[Install]
-WantedBy=default.target
-EOF
-    chroot . su -c 'systemctl --user enable dwl' i
 }
 
 mkcpio() {
