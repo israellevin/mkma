@@ -6,6 +6,15 @@ mkcleancd() {
     cd "$1"
 }
 
+mkline() {
+    local file="$1"
+    shift
+    local line="$*"
+    [ ! -d "$(dirname "$file")" ] && mkdir -p "$(dirname "$file")"
+    [ ! -f "$file" ] && touch "$file"
+    grep -q "^$line" "$file" || echo "$line" >> "$file"
+}
+
 mkchroot() {
     local packages; packages="$(echo "$@" | tr ' ' ',')"
     local suit=unstable
@@ -27,18 +36,8 @@ mksys() {
     systemd-firstboot --root . --reset
     systemd-firstboot --root . --force --copy --hostname="$host_name"
 
-    insert_if_not_exists() {
-        local file="$1"
-        shift
-        local line="$*"
-        grep -q "^$line" "$file" || echo "$line" >> "$file"
-    }
-
-    insert_if_not_exists ./etc/pam.d/su auth sufficient pam_rootok.so
-    insert_if_not_exists ./etc/hosts "127.0.0.1 $host_name"
-    insert_if_not_exists ./etc/locale.gen "en_US.UTF-8 UTF-8"
-
-    chroot . locale-gen || true
+    mkline ./etc/pam.d/su auth sufficient pam_rootok.so
+    mkline ./etc/hosts "127.0.0.1 $host_name"
 }
 
 mkapt() {
@@ -59,6 +58,17 @@ apt install -y $packages || exit 1
 apt clean
 systemctl enable iwd.service
 EOF
+
+    # Fucking copilot key (now that keyd is installed).
+    cat > ./etc/keyd/default.conf <<'EOF'
+[ids]
+*
+[main]
+leftshift+leftmeta+f23 = layer(control)
+EOF
+
+    mkline ./etc/locale.gen "en_US.UTF-8 UTF-8"
+    chroot . locale-gen || true
 }
 
 mkdwl() {
@@ -198,7 +208,7 @@ mkma() {
         # Common utilities.
         bc bsdextrautils bsdutils jq linux-perf mawk moreutils pciutils psmisc pv sed sudo ripgrep usbutils
         # CLI environment.
-        bash bash-completion chafa console-setup git git-delta less locales man mc tmux vim
+        bash bash-completion chafa console-setup git git-delta keyd less locales man mc tmux vim
         # Compression and archive tools.
         cpio gzip tar unrar unzip zstd
         # Networking infrastructure.
@@ -217,7 +227,7 @@ mkma() {
         libxcb-composite0 libxcb-errors0 libxcb-ewmh2 libxcb-icccm4 libxcb-render-util0
         libxcb-render0 libxcb-res0 libxcb-xinput0 xwayland
         # GUI tools.
-        cliphist fonts-noto fonts-noto-color-emoji foot firefox grim slurp wl-clipboard wlsunset wlrctl wmenu
+        cliphist fonts-noto-color-emoji fonts-noto-core foot firefox grim slurp wl-clipboard wlsunset wlrctl wmenu
     )
     if [ "$MKMA_QEMU_TEST" ]; then
         initramfs_modules+=(virtio_pci virtio_blk)
