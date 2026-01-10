@@ -71,11 +71,11 @@ EOF
     chroot . locale-gen || true
 }
 
-mkdwl() {
-    curl https://raw.githubusercontent.com/israellevin/dwl/refs/heads/master/Dockerfile > Dockerfile
+mkmango() {
+    curl https://raw.githubusercontent.com/israellevin/mangowc/refs/heads/master/Dockerfile > Dockerfile
     # If run with sudo and not with root, make sure not to screw up docker file permissions.
-    ${SUDO_USER:+sudo -u "$SUDO_USER"} docker build -t dwl-builder .
-    ${SUDO_USER:+sudo -u "$SUDO_USER"} docker run --rm --name dwl-builder -dp 80:8000 dwl-builder
+    ${SUDO_USER:+sudo -u "$SUDO_USER"} docker build -t mango-builder .
+    ${SUDO_USER:+sudo -u "$SUDO_USER"} docker run --rm --name mango-builder -dp 80:8000 mango-builder
     chroot . sh -c 'curl localhost | tar -xC / && ldconfig'
     rm Dockerfile
 }
@@ -253,7 +253,7 @@ mkma() {
     trap 'umount ./proc' EXIT INT TERM HUP
 
     mkapt "${packages[@]}"
-    mkdwl
+    mkmango
     # Allow keeping the user between runs for faster testing.
     if [ -f ./home/i/src/dotfiles/install.sh ]; then
         echo user already exists >&2

@@ -1,6 +1,6 @@
 # mkma.sh - Make a GNU/Linux machine the way I like it
 
-A simple set of scripts to create a minimal bootable GNU/Linux system image that loads entirely into RAM upon boot, with optional persistence layers. Currently based on debian with systemd-sysv, dbus-broker, wayland, pipewire and dwl.
+A simple set of scripts to create a minimal bootable GNU/Linux system image that loads entirely into RAM upon boot, with optional persistence layers. Currently based on debian with systemd-sysv, dbus-broker, wayland, pipewire and mangowc.
 
 ## Contents
 
