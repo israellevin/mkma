@@ -17,7 +17,6 @@ sudo ./mkma.sh <optional hostname (default: hostname of the building machine)>
 The script respects the following environment variables:
 - `MKMA_COMPRESSION_LEVEL` (default: `3`) - Compression level for `zstd` compression of the images
 - `MKMA_QEMU_TEST` (default: unset) - If set to `1` the script will run the created image in QEMU for testing (note: this will also add a couple of modules to the initramfs image)
-- `MKMA_QEMU_DRI` (default: unset) - If set to `1` the script will run QEMU with DRI enabled (requires `MKMA_QEMU_TEST` to be set as well)
 
 The script will create a `base.cpio.zst` file with the configured system, and an `initramfs.cpio.zst` file with the initial filesystem required to extracts the base image into a RAM based overlay filesystem during early boot. If you have `MKMA_QEMU_TEST` set to `1` (highly recommended when testing new configurations) it will then run the created image in QEMU for testing.
 

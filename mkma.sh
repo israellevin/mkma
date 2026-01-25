@@ -171,25 +171,17 @@ test_on_qemu() {
     umount ./mnt
     rmdir ./mnt
 
-    qemu_options=(
-        -m "$ramdisk_size"
-        -kernel "$kernel_image"
-        -initrd "$initramfs_image"
-        -append "console=tty root=/dev/ram0 init=/init mkma_storage_device=/dev/vda mkma_images_path=$images_dir"
-        -netdev 'user,id=mynet0'
-        -device 'e1000,netdev=mynet0'
-        -drive file="$qemu_disk,format=raw,if=virtio,cache=none"
+    qemu-system-x86_64 \
+        -m "$ramdisk_size" \
+        -kernel "$kernel_image" \
+        -initrd "$initramfs_image" \
+        -append "console=tty root=/dev/ram0 init=/init mkma_storage_device=/dev/vda mkma_images_path=$images_dir videp=virtio_gpu" \
+        -device 'virtio-vga-gl' \
+        -display 'gtk,gl=on' \
+        -netdev 'user,id=mynet0' \
+        -device 'e1000,netdev=mynet0' \
+        -drive file="$qemu_disk,format=raw,if=virtio,cache=none" \
         -enable-kvm
-    )
-
-    if [ "$MKMA_QEMU_DRI" ]; then
-        qemu_options+=(
-            -vga virtio
-            -display 'sdl,gl=on'
-        )
-    fi
-
-    qemu-system-x86_64 "${qemu_options[@]}"
 }
 
 mkma() {
@@ -235,9 +227,6 @@ mkma() {
     )
     if [ "$MKMA_QEMU_TEST" ]; then
         initramfs_modules+=(virtio_pci virtio_blk)
-        if [ "$MKMA_QEMU_DRI" ]; then
-            packages+=(mesa-utils libgl1-mesa-dri)
-        fi
     fi
 
     # Allow keeping the chroot between runs for faster testing.
