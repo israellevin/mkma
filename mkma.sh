@@ -171,17 +171,25 @@ test_on_qemu() {
     umount ./mnt
     rmdir ./mnt
 
+    local linux_command_line='console=tty root=/dev/ram0 /init'
+    linux_command_line+=' video=virtio_gpu'
+    linux_command_line+=' mkma_storage_device=/dev/vda'
+    linux_command_line+=" mkma_images_path=$images_dir"
+
     qemu-system-x86_64 \
         -m "$ramdisk_size" \
         -kernel "$kernel_image" \
         -initrd "$initramfs_image" \
-        -append "console=tty root=/dev/ram0 init=/init mkma_storage_device=/dev/vda mkma_images_path=$images_dir videp=virtio_gpu" \
+        -append "$linux_command_line" \
         -device 'virtio-vga-gl' \
         -display 'gtk,gl=on' \
         -netdev 'user,id=mynet0' \
         -device 'e1000,netdev=mynet0' \
         -drive file="$qemu_disk,format=raw,if=virtio,cache=none" \
-        -enable-kvm
+        -enable-kvm \
+        -audiodev 'pipewire,id=audio0' \
+        -device 'ich9-intel-hda' \
+        -device 'hda-duplex,audiodev=audio0'
 }
 
 mkma() {
