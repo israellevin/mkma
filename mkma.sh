@@ -71,13 +71,17 @@ EOF
     chroot . locale-gen || true
 }
 
-mkmango() {
-    curl https://raw.githubusercontent.com/israellevin/mangowc/refs/heads/master/Dockerfile > Dockerfile
+mkniri() {
+    git clone https://github.com/israellevin/niriush.git
+
     # If run with sudo and not with root, make sure not to screw up docker file permissions.
-    ${SUDO_USER:+sudo -u "$SUDO_USER"} docker build -t mango-builder .
-    ${SUDO_USER:+sudo -u "$SUDO_USER"} docker run --rm --name mango-builder -dp 80:8000 mango-builder
-    chroot . sh -c 'curl localhost | tar -xC / && ldconfig'
-    rm Dockerfile
+    non_sudo_docker() { ${SUDO_USER:+sudo -u "$SUDO_USER"} docker "$@"; }
+    non_sudo_docker build ./niriush -t niri-builder
+    non_sudo_docker run --rm --name niri-builder -dp 5020:80 niri-builder
+
+    chroot . sh -c 'curl localhost:5020 | tar -xC /'
+    cp -a ./niriush/niriu.sh ./usr/local/bin/.
+    rm -rf ./niriush
 }
 
 mkuser() {
@@ -86,7 +90,7 @@ groupadd wheel
 userdel --remove i
 set -e
 useradd --create-home --user-group --shell "$(type -p bash)" -G \
-    audio,bluetooth,clock,docker,plugdev,render,sudo,video,wheel i
+    audio,bluetooth,clock,docker,input,plugdev,render,sudo,video,wheel i
 passwd -d root
 passwd -d i
 su -c '
@@ -222,12 +226,12 @@ mkma() {
         # Session support.
         dbus-bin dbus-user-session libseat1 polkitd rtkit
         # Wayland support.
-        libgles2 libinput10 libliftoff0 libwayland-server0 xdg-desktop-portal xdg-desktop-portal-wlr
+        libgles2 libinput10 libliftoff0 libwayland-server0 xdg-desktop-portal-wlr
         # X support.
         libxcb-composite0 libxcb-errors0 libxcb-ewmh2 libxcb-icccm4 libxcb-render-util0
         libxcb-render0 libxcb-res0 libxcb-xinput0 xwayland
         # GUI tools.
-        cliphist fonts-noto-color-emoji fonts-noto-core foot firefox grim slurp wl-clipboard wlsunset wlrctl wmenu
+        cliphist fonts-noto-color-emoji fonts-noto-core foot firefox grim slurp wl-clipboard wlsunset wmenu ydotool
     )
     if [ "$MKMA_QEMU_TEST" ]; then
         initramfs_modules+=(virtio_pci virtio_blk)
@@ -253,7 +257,7 @@ mkma() {
     trap 'umount ./proc' EXIT INT TERM HUP
 
     mkapt "${packages[@]}"
-    mkmango
+    mkniri
     # Allow keeping the user between runs for faster testing.
     if [ -f ./home/i/src/dotfiles/install.sh ]; then
         echo user already exists >&2

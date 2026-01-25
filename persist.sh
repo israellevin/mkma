@@ -24,6 +24,6 @@ persist_count=$(wc -l < "$persist_list")
 pv -ls "$persist_count" "$persist_list" | cpio -o --format=newc | zstd -T0 -19 > "$persist_file"
 echo "Persistence snapshot saved to '$persist_file' and will be used on next boot."
 
+rm "$persist_list"
 umount "$mountpoint"
 rmdir "$mountpoint"
-rm "$persist_list"
