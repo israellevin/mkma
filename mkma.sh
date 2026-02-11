@@ -72,16 +72,20 @@ EOF
 }
 
 mkniri() {
-    git clone https://github.com/israellevin/niriush.git
-
-    # If run with sudo and not with root, make sure not to screw up docker file permissions.
-    non_sudo_docker() { ${SUDO_USER:+sudo -u "$SUDO_USER"} docker "$@"; }
-    non_sudo_docker build ./niriush -t niri-builder
-    non_sudo_docker run --rm --name niri-builder -dp 5020:80 niri-builder
-
-    chroot . sh -c 'curl localhost:5020 | tar -xC /'
-    cp -a ./niriush/niriu.sh ./usr/local/bin/.
-    rm -rf ./niriush
+    git clone https://github.com/israellevin/niri-helpers.git --depth=1
+    cd niri-helpers
+    # The mkniri.sh script uses docker and this script is ususally run with sudo,
+    # so to avoid messing up docker permissions we may need this little dance.
+    if [ "$SUDO_USER" ] && [ "$(id -u)" -ne 0 ]; then
+        mkdir build
+        chown -R "$SUDO_USER" build
+        sudo -u "$SUDO_USER" ./mkniri.sh
+    else
+        ./mkniri.sh
+    fi
+    cp -a ./niriu.sh ./build/* ../usr/local/bin/.
+    cd ..
+    rm -rf niri-helpers
 }
 
 mkuser() {
@@ -226,12 +230,10 @@ mkma() {
         # Session support.
         dbus-bin dbus-user-session libseat1 polkitd rtkit
         # Wayland support.
-        libgles2 libinput10 libliftoff0 libwayland-server0 xdg-desktop-portal-wlr
-        # X support.
-        libxcb-composite0 libxcb-errors0 libxcb-ewmh2 libxcb-icccm4 libxcb-render-util0
-        libxcb-render0 libxcb-res0 libxcb-xinput0 xwayland
+        libgles2 libinput10 libliftoff0 libwayland-server0 xdg-desktop-portal-wlr xwayland
         # GUI tools.
-        cliphist fonts-noto-color-emoji fonts-noto-core foot firefox grim slurp wl-clipboard wlsunset wmenu ydotool
+        cliphist fonts-noto-color-emoji fonts-noto-core foot firefox fnott grim
+        libnotify-bin slurp wl-clipboard wlsunset wmenu ydotool
     )
     if [ "$MKMA_QEMU_TEST" ]; then
         initramfs_modules+=(virtio_pci virtio_blk)
