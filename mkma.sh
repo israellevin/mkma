@@ -217,8 +217,8 @@ mkma() {
         bc bsdextrautils bsdutils jq linux-perf mawk moreutils pciutils psmisc pv sed sudo ripgrep usbutils
         # CLI environment.
         bash bash-completion chafa console-setup git git-delta keyd less locales man mc tmux vim
-        # Compression and archive tools.
-        cpio gzip tar unrar unzip zstd
+        # Archive, compression and cryptography tools.
+        cpio gpg gzip openssl tar unrar unzip zstd
         # Networking infrastructure.
         ca-certificates dhcpcd5 iproute2 netbase
         # Networking tools.
