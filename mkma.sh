@@ -74,17 +74,26 @@ EOF
 mkniri() {
     git clone https://github.com/israellevin/niri-helpers.git --depth=1
     cd niri-helpers
+    mkniri_cmd=(
+        ./mkniri.sh
+        --repo https://github.com/israellevin/niri.git
+        --branch focus-ignores-click
+    )
+
     # The mkniri.sh script uses docker and this script is ususally run with sudo,
     # so to avoid messing up docker permissions we may need this little dance.
     if [ "$SUDO_USER" ] && [ "$(id -u)" -ne 0 ]; then
         mkdir build
         chown -R "$SUDO_USER" build
-        sudo -u "$SUDO_USER" ./mkniri.sh
+        sudo -u "$SUDO_USER" "${mkniri_cmd[@]}"
     else
-        ./mkniri.sh
+        "${mkniri_cmd[@]}"
     fi
-    cp -a ./niriu.sh ./build/* ../usr/local/bin/.
+
     cd ..
+    mkdir -p ./usr/share/doc/ned/
+    mv ./niri-helpers/build/ned_examples/ ./usr/share/doc/ned/examples/
+    mv ./niri-helpers/{niriu.sh,/build/*} ./usr/local/bin/.
     rm -rf niri-helpers
 }
 
@@ -98,8 +107,6 @@ useradd --create-home --user-group --shell "$(type -p bash)" -G \
 passwd -d root
 passwd -d i
 su -c '
-    false
-    set -e
     git clone https://github.com/israellevin/dotfiles.git ~/src/dotfiles
     sh -e ~/src/dotfiles/install.sh --non-interactive
 ' i
