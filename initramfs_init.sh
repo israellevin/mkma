@@ -93,5 +93,5 @@ mount --bind "$overlay_dir" "$bind_dir" || \
     error "Could not bind mount '$merge_dir' to '$bind_dir' - overlay will not be accessible from new root"
 
 info Moving to mkma root on "$merge_dir"
-exec run-init "$merge_dir" /lib/systemd/systemd || \
-    emergency Failed pivot to systemd on "$merge_dir"
+exec run-init "$merge_dir" /sbin/init || \
+    emergency Failed pivot to /sbin/init on "$merge_dir"
