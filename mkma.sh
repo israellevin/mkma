@@ -47,10 +47,23 @@ mkconfig() {
 [main]
 leftshift+leftmeta+f23 = layer(control)
 EOF
+    # Use uv to install Brave's adblocker Python bindings for qutebrowser (without `python3-pip`).
+    chroot . <<'EOF'
+if ! python3 -c 'import adblock' >/dev/null 2>&1; then
+    uv_version="$(curl -fsSL https://astral.sh/uv/install.sh | grep APP_VERSION= | cut -d'"' -f2)"
+    uv_base_url=https://releases.astral.sh/github/uv/releases/download
+    curl -fsSL "$uv_base_url/$uv_version/uv-x86_64-unknown-linux-gnu.tar.gz" | \
+        tar xz --strip-components=1 -C /tmp/
+    /tmp/uv pip install --system --break-system-packages --no-cache-dir adblock
+    rm -f /tmp/uv*
+fi
+EOF
     # Configure turnstile and fit it to POSIX shell.
-    sed -i -e 's/^backend =.*/backend = runit/' -e 's/^manage_rundir =.*/manage_rundir = yes/' \
-        ./etc/turnstile/turnstiled.conf
-    sed -i -e 's/^exec pause$/exec sleep infinity/' ./usr/libexec/turnstile/runit
+    sed -i ./etc/turnstile/turnstiled.conf \
+        -e 's|^backend =.*|backend = runit|' \
+        -e 's|^manage_rundir =.*|manage_rundir = yes|'
+    sed -i ./usr/libexec/turnstile/runit \
+        -e 's|^exec pause$|exec sleep infinity|'
 }
 
 mkniri() {
