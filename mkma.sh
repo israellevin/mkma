@@ -108,8 +108,38 @@ su -c '
     sh -e ~/src/dotfiles/install.sh --non-interactive
 ' "$user"
 EOF
+    # Passwordless su.
     echo auth sufficient pam_wheel.so trust >> ./etc/pam.d/su
-    sed -i -e "s/^exec chpst -P getty /exec chpst -P getty -a '$user' /" ./etc/sv/getty-tty1/run
+    # Autologin on tty1.
+    sed -e "s/^exec chpst -P getty /exec chpst -P getty -a '$user' /" -i ./etc/sv/getty-tty1/run
+    # User services for dbus and pipewire.
+    local service_directory="./home/$user/.config/service"
+    mkdir -p "$service_directory"/{dbus,pipewire}/supervise
+    cat > "$service_directory/dbus/check" <<'EOF'
+#!/bin/sh
+exec dbus-send --bus="unix:path=$XDG_RUNTIME_DIR/bus" / org.freedesktop.DBus.Peer.Ping > /dev/null 2>&1
+EOF
+    cat > "$service_directory/dbus/run" <<'EOF'
+#!/bin/sh
+: "${DBUS_SESSION_BUS_ADDRESS:=unix:path=/run/user/$(id -u)/bus}"
+[ -d "$TURNSTILE_ENV_DIR" ] && echo "$DBUS_SESSION_BUS_ADDRESS" > \
+    "$TURNSTILE_ENV_DIR"/DBUS_SESSION_BUS_ADDRESS
+exec chpst -e "$TURNSTILE_ENV_DIR" \
+    dbus-daemon --session --nofork --nopidfile --address="$DBUS_SESSION_BUS_ADDRESS"
+EOF
+    cat > "$service_directory/pipewire/run" <<'EOF'
+#!/bin/sh -e
+: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
+[ -d "$TURNSTILE_ENV_DIR" ] && echo "$XDG_RUNTIME_DIR" > "$TURNSTILE_ENV_DIR"/XDG_RUNTIME_DIR
+exec chpst -e "$TURNSTILE_ENV_DIR" /usr/bin/pipewire
+EOF
+    chmod +x "$service_directory/"{dbus,pipewire}/*
+    chroot . chown -R "$user:$user" "$service_directory"
+    # Configure pipewire to launch wireplumber (still debating pipewire-pulse).
+    mkdir -p "./home/$user/.config/pipewire/pipewire.conf.d"
+    echo 'context.exec = [ { path = "/usr/bin/wireplumber" args = "" } ]' > \
+        "./home/$user/.config/pipewire/pipewire.conf.d/10-wireplumber.conf"
+    chroot . chown -R "$user:$user" "./home/$user/.config/pipewire"
 }
 
 mkchroot() {
@@ -250,7 +280,7 @@ mkma() {
 
     local packages=(
         # Base system (avoid accidentally installing systemd or something like that).
-        runit-init systemd-standalone-sysusers
+        runit-init systemctl systemd-standalone-sysusers
         # Hardware support for my laptop.
         firmware-intel-* firmware-iwlwifi firmware-sof-signed intel-lpmd intel-media-va-driver-non-free intel-microcode
         # Hardware tuning and performance.
