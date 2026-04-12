@@ -33,7 +33,8 @@ export DEBIAN_FRONTEND=noninteractive
 apt update
 apt install -y $packages || exit 1
 apt clean
-update-rc.d -f docker disable 2>/dev/null || true
+systemctl enable iwd.service
+systemctl disable docker.service
 EOF
     mkline ./etc/locale.gen "en_US.UTF-8 UTF-8"
     chroot . locale-gen || true
@@ -58,12 +59,6 @@ if ! python3 -c 'import adblock' >/dev/null 2>&1; then
     rm -f /tmp/uv*
 fi
 EOF
-    # Configure turnstile and fit it to POSIX shell.
-    sed -i ./etc/turnstile/turnstiled.conf \
-        -e 's|^backend =.*|backend = runit|' \
-        -e 's|^manage_rundir =.*|manage_rundir = yes|'
-    sed -i ./usr/libexec/turnstile/runit \
-        -e 's|^exec pause$|exec sleep infinity|'
 }
 
 mkniri() {
@@ -111,35 +106,13 @@ EOF
     # Passwordless su.
     echo auth sufficient pam_wheel.so trust >> ./etc/pam.d/su
     # Autologin on tty1.
-    sed -e "s/^exec chpst -P getty /exec chpst -P getty -a '$user' /" -i ./etc/sv/getty-tty1/run
-    # User services for dbus and pipewire.
-    local service_directory="./home/$user/.config/service"
-    mkdir -p "$service_directory"/{dbus,pipewire}/supervise
-    cat > "$service_directory/dbus/check" <<'EOF'
-#!/bin/sh
-exec dbus-send --bus="unix:path=$XDG_RUNTIME_DIR/bus" / org.freedesktop.DBus.Peer.Ping > /dev/null 2>&1
+    mkdir -p ./etc/systemd/system/getty@tty1.service.d
+    cat > ./etc/systemd/system/getty@tty1.service.d/override.conf <<'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin i --noreset --noclear - ${TERM}
+Type=simple
 EOF
-    cat > "$service_directory/dbus/run" <<'EOF'
-#!/bin/sh
-: "${DBUS_SESSION_BUS_ADDRESS:=unix:path=/run/user/$(id -u)/bus}"
-[ -d "$TURNSTILE_ENV_DIR" ] && echo "$DBUS_SESSION_BUS_ADDRESS" > \
-    "$TURNSTILE_ENV_DIR"/DBUS_SESSION_BUS_ADDRESS
-exec chpst -e "$TURNSTILE_ENV_DIR" \
-    dbus-daemon --session --nofork --nopidfile --address="$DBUS_SESSION_BUS_ADDRESS"
-EOF
-    cat > "$service_directory/pipewire/run" <<'EOF'
-#!/bin/sh -e
-: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
-[ -d "$TURNSTILE_ENV_DIR" ] && echo "$XDG_RUNTIME_DIR" > "$TURNSTILE_ENV_DIR"/XDG_RUNTIME_DIR
-exec chpst -e "$TURNSTILE_ENV_DIR" /usr/bin/pipewire
-EOF
-    chmod +x "$service_directory/"{dbus,pipewire}/*
-    chroot . chown -R "$user:$user" "$service_directory"
-    # Configure pipewire to launch wireplumber (still debating pipewire-pulse).
-    mkdir -p "./home/$user/.config/pipewire/pipewire.conf.d"
-    echo 'context.exec = [ { path = "/usr/bin/wireplumber" args = "" } ]' > \
-        "./home/$user/.config/pipewire/pipewire.conf.d/10-wireplumber.conf"
-    chroot . chown -R "$user:$user" "./home/$user/.config/pipewire"
 }
 
 mkchroot() {
@@ -279,8 +252,8 @@ mkma() {
     local initramfs_modules=(ext4 nvme overlay pci)
 
     local packages=(
-        # Base system (avoid accidentally installing systemd or something like that).
-        runit-init systemctl systemd-standalone-sysusers
+        # Base system choises (just to avoid debian defaults).
+        dbus-broker systemd-sysv
         # Hardware support for my laptop.
         firmware-intel-* firmware-iwlwifi firmware-sof-signed intel-lpmd intel-media-va-driver-non-free intel-microcode
         # Hardware tuning and performance.
