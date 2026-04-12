@@ -70,7 +70,7 @@ info Checking for mkma persistence images on "'$images_dir'"
 for image in "$images_dir"/persistence.*.cpio.zst; do
     if [ -f "$image" ]; then
         info Copying mkma persistence image data from "'$image'" to "'$base_dir'"
-        pv -pterab "$image" | zstd -dcfT0 | cpio -id || \
+        pv -pterab "$image" | zstd -dcfT0 | cpio -idu || \
             error Could not copy persistence image data from "'$image'"
     fi
 done
