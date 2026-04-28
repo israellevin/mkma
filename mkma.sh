@@ -277,7 +277,7 @@ mkma() {
         # Session support.
         libseat1 seatd
         # Wayland support.
-        libgles2 libinput10 libliftoff0 libwayland-server0 xdg-desktop-portal-wlr xwayland
+        libgles2 libinput10 libliftoff0 libwayland-server0 qt6-wayland xdg-desktop-portal-wlr xwayland
         # GUI tools.
         cliphist fonts-noto-color-emoji fonts-noto-core foot firefox-esr fnott grim
         libnotify-bin qutebrowser slurp wl-clipboard wlsunset wmenu ydotool
