@@ -48,6 +48,16 @@ mkconfig() {
 [main]
 leftshift+leftmeta+f23 = layer(control)
 EOF
+
+    # Make sure it is considered an internal keyboard by libinput, otherwise dwt won't work.
+    mkdir -p /etc/libinput
+    cat > /etc/libinput/keyd-internal.quirks <<'EOF'
+[Serial Keyboards]
+MatchUdevType=keyboard
+MatchName=keyd*keyboard
+AttrKeyboardIntegration=internal
+EOF
+
     # Use uv to install Brave's adblocker Python bindings for qutebrowser (without `python3-pip`).
     chroot . <<'EOF'
 if ! python3 -c 'import adblock' >/dev/null 2>&1; then
@@ -68,7 +78,7 @@ mkniri() {
     mkniri_cmd=(
         ./mkniri.sh
         --repo https://github.com/israellevin/niri.git
-        --branch focus-ignores-click
+        --branch focus-ignores-click-with-zoom
     )
 
     # The mkniri.sh script uses docker and this script is ususally run with sudo,
