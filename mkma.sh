@@ -51,7 +51,7 @@ EOF
 
     # Make sure it is considered an internal keyboard by libinput, otherwise dwt won't work.
     mkdir -p /etc/libinput
-    cat > /etc/libinput/keyd-internal.quirks <<'EOF'
+    cat > /etc/libinput/local-overrides.quirks <<'EOF'
 [Serial Keyboards]
 MatchUdevType=keyboard
 MatchName=keyd*keyboard
