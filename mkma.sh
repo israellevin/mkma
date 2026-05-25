@@ -3,10 +3,12 @@
 mkline() {
     local file="$1"
     shift
-    local line="$*"
-    [ ! -d "$(dirname "$file")" ] && mkdir -p "$(dirname "$file")"
-    [ ! -f "$file" ] && touch "$file"
-    grep -q "^$line" "$file" || echo "$line" >> "$file"
+    grep -Fxq "$*" "$file" || echo "$*" >> "$file"
+}
+
+mkfile() {
+    mkdir -p "$(dirname "$1")"
+    cat > "$1"
 }
 
 mksys() {
@@ -22,8 +24,7 @@ mksys() {
 
 mkapt() {
     local packages="$*"
-    mkdir -p ./etc/apt
-    cat > ./etc/apt/apt.conf <<'EOF'
+    mkfile ./etc/apt/apt.conf <<'EOF'
 APT::Install-Recommends "0";
 APT::Install-Suggests "0";
 EOF
@@ -42,7 +43,7 @@ EOF
 
 mkconfig() {
     # Remap damn copilot key as ctrl.
-    cat > ./etc/keyd/default.conf <<'EOF'
+    mkfile ./etc/keyd/default.conf <<'EOF'
 [ids]
 *
 [main]
@@ -50,8 +51,7 @@ leftshift+leftmeta+f23 = layer(control)
 EOF
 
     # Make sure it is considered an internal keyboard by libinput, otherwise dwt won't work.
-    mkdir -p /etc/libinput
-    cat > /etc/libinput/local-overrides.quirks <<'EOF'
+    mkfile /etc/libinput/local-overrides.quirks <<'EOF'
 [Serial Keyboards]
 MatchUdevType=keyboard
 MatchName=keyd*keyboard
@@ -114,10 +114,10 @@ su -c '
 ' "$user"
 EOF
     # Passwordless su.
-    echo auth sufficient pam_wheel.so trust >> ./etc/pam.d/su
+    mkline ./etc/pam.d/su auth sufficient pam_wheel.so trust
+
     # Autologin on tty1.
-    mkdir -p ./etc/systemd/system/getty@tty1.service.d
-    cat > ./etc/systemd/system/getty@tty1.service.d/override.conf <<'EOF'
+    mkfile ./etc/systemd/system/getty@tty1.service.d/override.conf <<'EOF'
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin i --noreset --noclear - ${TERM}
