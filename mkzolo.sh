@@ -22,6 +22,9 @@
 #
 #     sudo ./mkzolo.sh <optional hostname (default: zolo)>
 #
+# Build host needs: debootstrap busybox pv zstd cpio (and qemu-system-x86,
+# qemu-utils, e2fsprogs for MKMA_QEMU_TEST).
+#
 # Respected environment variables:
 # - MKMA_COMPRESSION_LEVEL (default: 3)  - zstd level for the images
 # - MKMA_QEMU_TEST         (default: unset) - if 1, boot the image headless
@@ -186,6 +189,50 @@ EOF
     chroot . systemctl enable zolo-hello.service
 }
 
+mkinitramfs_zolo() {
+    # Tolerant twin of mkma's mkinitramfs: cloud/server kernels build ext4,
+    # nvme, pci and virtio straight into the kernel (no .ko to copy), so an
+    # unresolvable module is skipped instead of fatal, and depmod only runs
+    # when module files were actually copied.
+    local initramfs_dir="$1"
+    local init_file="$2"
+    local modules="$3"
+    local binaries="$4"
+
+    rm -rf "$initramfs_dir" || true
+    mkdir -p "$initramfs_dir"
+    pushd "$initramfs_dir"
+
+    for required_module in $modules; do
+        for dependency in $(modprobe --show-depends "$required_module" 2>/dev/null | grep -Po '^insmod \K.*$' || true); do
+            mkdir -p ".$(dirname "$dependency")"
+            cp -au --parents "$dependency" .
+        done
+    done
+    if [ -d ./lib/modules ]; then
+        depmod -m "$(realpath ./lib/modules)"
+    fi
+
+    mkdir -p ./bin
+    for binary in $binaries; do
+        binary="$(type -p "$binary")"
+        cp -a "$binary" ./bin/.
+        for library in $(ldd "$binary" 2> /dev/null | grep -o '/[^ ]*'); do
+            cp -auL --parents "$library" .
+        done
+    done
+
+    cd ./bin
+    for applet in $(./busybox --list | grep -v busybox); do
+        ln -s ./busybox "./$applet"
+    done
+    cd ..
+
+    cp "$init_file" ./init
+    chmod +x ./init
+    popd
+}
+
 mkchroot_zolo() {
     local chroot_dir="$1"
     local host_name="$2"
@@ -249,7 +296,9 @@ test_zolo_on_qemu() {
     linux_command_line+=' mkma_storage_device=/dev/vda'
     linux_command_line+=" mkma_images_path=$images_dir"
 
-    local kvm_flags=()
+    # Without KVM, TCG's default CPU (qemu64) lacks the x86-64-v2 instructions
+    # modern numpy wheels are compiled for — `-cpu max` emulates them.
+    local kvm_flags=(-cpu max)
     [ -w /dev/kvm ] && kvm_flags=(-enable-kvm -cpu host)
 
     : > "$serial_log"
@@ -263,7 +312,7 @@ test_zolo_on_qemu() {
         -serial "file:$serial_log" \
         -display none \
         -netdev 'user,id=mynet0,hostfwd=tcp:127.0.0.1:18080-:8080' \
-        -device 'e1000,netdev=mynet0' &
+        -device 'virtio-net-pci,netdev=mynet0' &
     local qemu_pid=$!
     # shellcheck disable=SC2064  # We want this to resolve now.
     trap "kill $qemu_pid 2>/dev/null || true" EXIT
@@ -301,8 +350,9 @@ mkzolo() {
     local initramfs_modules=(ext4 nvme overlay pci)
 
     local packages=(
-        # Base system choices (just to avoid debian defaults).
-        dbus-broker systemd-sysv
+        # Base system choices (just to avoid debian defaults). udev because
+        # minbase doesn't pull it and without it no NIC driver ever autoloads.
+        dbus-broker systemd-sysv udev
         # System administration.
         kmod pciutils psmisc sudo
         # CLI environment.
@@ -320,7 +370,7 @@ mkzolo() {
     cp -a "$persist_script" "$chroot_dir/sbin/persist.sh"
     mkcpio "$chroot_dir" "${MKMA_COMPRESSION_LEVEL:-3}" > "$base_image"
 
-    mkinitramfs "$initramfs_dir" "$initramfs_init_file" "${initramfs_modules[*]}" "${initramfs_binaries[*]}"
+    mkinitramfs_zolo "$initramfs_dir" "$initramfs_init_file" "${initramfs_modules[*]}" "${initramfs_binaries[*]}"
     mkcpio "$initramfs_dir" "${MKMA_COMPRESSION_LEVEL:-3}" > "$initramfs_image"
 
     if [ "$MKMA_QEMU_TEST" ]; then
