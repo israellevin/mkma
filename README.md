@@ -56,3 +56,15 @@ That's why the current implementation has a manual editing step to remove unwant
 Bottom line: if you want to persist your local environment, a few carefully installed packages and some configuration files, this is the way to go. I may even automate it at some point, use hard coded filters instead of manual editing and run it according to some twisted logic involving time since last snapshot and available resources. If, however, you need to persist larger amounts of data in a more continuous manner, just mount a storage device and use it directly.
 
 And if you find that you need files that are constantly in flux (like databases and caches) to be continuously persisted, then mkma is probably not the right tool for you.
+
+## mkzolo.sh - a zolo machine
+
+`mkzolo.sh` builds a mkma image that boots straight into a running [zOS](https://zolo.media) engine (`pip install zolo-os`) — a private "cloud" in the only honest sense: your server, your RAM, no accounts, no website. It sources `mkma.sh` for its primitives and changes none of them; the package set is a lean server profile (no GUI, no wifi), the zolo runtime rides a uv-pinned CPython in `/opt/zolo`, its engine binaries are provisioned at build time (`z patch`, so first boot needs no network), and a minimal demo app is served by systemd from boot on port 8080.
+
+```shell
+sudo ./mkzolo.sh <optional hostname (default: zolo)>
+```
+
+Same environment variables as `mkma.sh`, plus `ZOLO_VERSION` to pin the runtime. With `MKMA_QEMU_TEST=1` the test is headless (serial console to `qemu.serial.log`, KVM only when available) and passes only when the engine inside the RAM-booted guest answers real HTTP through a forwarded port.
+
+The layering follows the persistence advice above: the engine is immutable in the base image; app data (sqlite — files constantly in flux) should live on a mounted storage device, not in the RAM overlay. The demo app keeps no data, so the image stays pure. Build in a separate directory from a plain mkma build — the image names are shared on purpose (`initramfs_init.sh` expects them).
